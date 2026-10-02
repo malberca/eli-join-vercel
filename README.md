@@ -4,7 +4,7 @@ Onboarding de residentes de ELI. El vecino llega con un link o un QR del consorc
 
 ## Cómo funciona
 
-- `src/app/[token]/page.tsx` muestra el formulario (`src/components/join-onboarding.tsx`).
+- `src/app/[token]/page.tsx` muestra el formulario (`src/components/joinOnboarding.tsx`).
 - `GET /api/join/[token]` valida el link y devuelve el consorcio y sus unidades.
 - `POST /api/join/[token]/submit` valida los datos y crea la solicitud en estado `PENDING_VERIFICATION`.
 
