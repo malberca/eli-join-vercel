@@ -1,4 +1,4 @@
-import JoinOnboarding from '@/components/join-onboarding'
+import { JoinOnboarding } from '@/components/joinOnboarding'
 
 export default async function JoinPage({
   params,
