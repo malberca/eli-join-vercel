@@ -26,12 +26,8 @@ jobs:
           cache: pnpm
           node-version-file: .nvmrc
       - run: pnpm install --frozen-lockfile
-      # No bloquean mientras el código existente se adapta a las reglas nuevas.
-      # Sacar continue-on-error en el último PR de esa limpieza.
       - run: pnpm lint --max-warnings 0
-        continue-on-error: true
       - run: pnpm format:check
-        continue-on-error: true
       - run: pnpm deps:check
       - run: pnpm typecheck
       - name: commitlint
