@@ -1,12 +1,17 @@
 {
   "name": "1-eli-join",
   "version": "0.1.0",
-  "private": true,
   "scripts": {
-    "dev": "next dev",
     "build": "next build",
+    "deps:check": "knip",
+    "dev": "next dev",
+    "format:check": "prettier --check .",
+    "format:write": "prettier --write .",
+    "lint": "eslint --cache .",
+    "lint:fix": "eslint --cache . --fix",
+    "prepare": "husky",
     "start": "next start",
-    "lint": "eslint"
+    "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.1",
@@ -15,13 +20,32 @@
     "react-dom": "19.2.8"
   },
   "devDependencies": {
+    "@commitlint/cli": "21.0.1",
+    "@commitlint/config-conventional": "21.0.1",
+    "@eslint-community/eslint-plugin-eslint-comments": "4.8.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "better-sort-package-json": "1.1.1",
     "eslint": "^9",
     "eslint-config-next": "16.3.6",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-check-file": "3.3.2",
+    "eslint-plugin-jsx-a11y": "6.10.2",
+    "eslint-plugin-markdownlint": "1.0.0",
+    "eslint-plugin-prefer-arrow": "1.2.3",
+    "eslint-plugin-promise": "7.3.0",
+    "eslint-plugin-react": "7.37.5",
+    "eslint-plugin-sort-destructure-keys": "3.0.0",
+    "husky": "9.1.7",
+    "knip": "6.13.1",
+    "lint-staged": "17.0.5",
+    "prettier": "3.8.4",
+    "prettier-plugin-tailwindcss": "0.8.0",
     "tailwindcss": "^4",
     "typescript": "^5"
-  }
+  },
+  "private": true,
+  "packageManager": "pnpm@11.24.0"
 }

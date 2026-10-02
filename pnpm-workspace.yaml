@@ -1,0 +1,12 @@
+allowBuilds:
+  sharp: true # libvips bindings required by Next.js production image optimization
+  unrs-resolver: true # Rust resolver required by eslint-import-resolver-typescript during lint
+
+blockExoticSubdeps: true
+
+minimumReleaseAge: 10080 # 7 days in minutes
+
+publicHoistPattern:
+  - '*eslint*'
+
+saveExact: true
