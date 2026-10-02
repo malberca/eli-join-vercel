@@ -10,7 +10,8 @@
     "lint": "eslint --cache .",
     "lint:fix": "eslint --cache . --fix",
     "prepare": "husky",
-    "start": "next start"
+    "start": "next start",
+    "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.1",

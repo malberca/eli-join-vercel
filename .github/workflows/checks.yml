@@ -33,7 +33,7 @@ jobs:
       - run: pnpm format:check
         continue-on-error: true
       - run: pnpm deps:check
-      - run: pnpm exec tsc --noEmit
+      - run: pnpm typecheck
       - name: commitlint
         if: github.event_name == 'pull_request'
         run: pnpm exec commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }}

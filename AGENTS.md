@@ -26,4 +26,4 @@ Las hace cumplir ESLint (`eslint.config.mjs`), el hook de pre-commit y el CI: si
 
 Una excepción se marca con `// eslint-disable-next-line <regla> -- motivo`. Sin el motivo, también falla.
 
-Antes de dar un cambio por terminado: `pnpm lint`, `pnpm format:check`, `pnpm deps:check` y `pnpm exec tsc --noEmit`.
+Antes de dar un cambio por terminado: `pnpm lint`, `pnpm format:check`, `pnpm deps:check` y `pnpm typecheck`.
