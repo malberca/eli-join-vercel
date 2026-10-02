@@ -1,10 +1,20 @@
-import { createHash } from 'crypto'
 import { NextResponse } from 'next/server'
 
-import { supabaseAdmin } from '@/lib/supabase-admin'
+import {
+  errorResponse,
+  findActiveJoinLink,
+  type JoinLink,
+} from '@/lib/joinLink'
+import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
-const hashToken = (token: string) =>
-  createHash('sha256').update(token).digest('hex')
+function toConsorcio(edificios: JoinLink['edificios']) {
+  const edificio = Array.isArray(edificios) ? edificios[0] : edificios
+
+  return {
+    address: edificio?.direccion ?? null,
+    name: edificio?.nombre ?? 'Consorcio',
+  }
+}
 
 export async function GET(
   _request: Request,
@@ -13,52 +23,18 @@ export async function GET(
   const { token } = await context.params
 
   if (!token) {
-    return NextResponse.json({ code: 'INVALID_TOKEN' }, { status: 400 })
+    return errorResponse('INVALID_TOKEN', 400)
   }
 
-  const tokenHash = hashToken(token)
+  const result = await findActiveJoinLink(token)
 
-  const { data: joinLink, error: joinError } = await supabaseAdmin
-    .from('resident_join_links')
-    .select(
-      `
-      id,
-      organization_id,
-      edificio_id,
-      status,
-      expires_at,
-      edificios (
-        id,
-        nombre,
-        direccion
-      )
-    `,
-    )
-    .eq('token_hash', tokenHash)
-    .maybeSingle()
-
-  if (joinError) {
-    console.error('join lookup failed', joinError)
-
-    return NextResponse.json({ code: 'INTERNAL_ERROR' }, { status: 500 })
+  if ('response' in result) {
+    return result.response
   }
 
-  if (!joinLink) {
-    return NextResponse.json({ code: 'INVALID_TOKEN' }, { status: 404 })
-  }
+  const { joinLink } = result
 
-  if (joinLink.status !== 'active') {
-    return NextResponse.json({ code: 'TOKEN_INACTIVE' }, { status: 410 })
-  }
-
-  if (
-    joinLink.expires_at &&
-    new Date(joinLink.expires_at).getTime() <= Date.now()
-  ) {
-    return NextResponse.json({ code: 'TOKEN_INACTIVE' }, { status: 410 })
-  }
-
-  const { data: units, error: unitsError } = await supabaseAdmin
+  const { data: units, error } = await supabaseAdmin
     .from('unidades')
     .select('id, numero, piso')
     .eq('organization_id', joinLink.organization_id)
@@ -66,25 +42,12 @@ export async function GET(
     .order('piso', { ascending: true })
     .order('numero', { ascending: true })
 
-  if (unitsError) {
-    console.error('units lookup failed', unitsError)
-
-    return NextResponse.json({ code: 'INTERNAL_ERROR' }, { status: 500 })
+  if (error) {
+    return errorResponse('INTERNAL_ERROR', 500)
   }
 
-  const edificio = Array.isArray(joinLink.edificios)
-    ? joinLink.edificios[0]
-    : joinLink.edificios
-
   return NextResponse.json({
-    consorcio: {
-      name: edificio?.nombre ?? 'Consorcio',
-      address: edificio?.direccion ?? null,
-    },
-    units:
-      units?.map(unit => ({
-        id: unit.id,
-        label: unit.numero,
-      })) ?? [],
+    consorcio: toConsorcio(joinLink.edificios),
+    units: units?.map(unit => ({ id: unit.id, label: unit.numero })) ?? [],
   })
 }
