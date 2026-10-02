@@ -1,36 +1,36 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ELI Join
 
-## Getting Started
+Onboarding de residentes de ELI. El vecino llega con un link o un QR del consorcio (`/[token]`), completa sus datos, elige su unidad y deja una solicitud pendiente. La administración la aprueba desde ELI Desk.
 
-First, run the development server:
+## Cómo funciona
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
+- `src/app/[token]/page.tsx` muestra el formulario (`src/components/join-onboarding.tsx`).
+- `GET /api/join/[token]` valida el link y devuelve el consorcio y sus unidades.
+- `POST /api/join/[token]/submit` valida los datos y crea la solicitud en estado `PENDING_VERIFICATION`.
+
+El esquema y las migraciones de la base están en [eli-database-platform](https://github.com/manoconsultora/eli-database-platform).
+
+## Requisitos
+
+- Node 24 (`.nvmrc`)
+- pnpm 11 (`packageManager` en `package.json`)
+
+## Desarrollo
+
+```sh
+pnpm install   # también activa los hooks de git
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Verificación
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```sh
+pnpm lint
+pnpm format:check
+pnpm deps:check
+pnpm typecheck
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+El hook de pre-commit corre ESLint y Prettier sobre los archivos del commit. Commitlint exige Conventional Commits. El CI corre los mismos comandos en cada PR.
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Las convenciones del equipo están en `AGENTS.md`.
