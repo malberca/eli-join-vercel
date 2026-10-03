@@ -13,26 +13,19 @@ export type Unit = {
   label: string
 }
 
+type Relationship = {
+  label: string
+  value: string
+}
+
 export type JoinData = {
   consorcio: {
     address: string | null
     name: string
   }
+  relationships: Relationship[]
   units: Unit[]
 }
-
-type Relationship = 'OWNER' | 'TENANT' | 'FAMILY' | 'COHABITANT' | 'OTHER'
-
-export const relationships: {
-  label: string
-  value: Relationship
-}[] = [
-  { label: 'Propietario', value: 'OWNER' },
-  { label: 'Inquilino', value: 'TENANT' },
-  { label: 'Familiar', value: 'FAMILY' },
-  { label: 'Conviviente', value: 'COHABITANT' },
-  { label: 'Otro', value: 'OTHER' },
-]
 
 const SUBMIT_ERROR = 'No pudimos enviar tu solicitud.'
 
@@ -54,7 +47,7 @@ export function useJoinForm({
   const [unitSearch, setUnitSearch] = useState('')
   const [unitId, setUnitId] = useState('')
 
-  const [relationship, setRelationship] = useState<Relationship | null>(null)
+  const [relationship, setRelationship] = useState<string | null>(null)
 
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)

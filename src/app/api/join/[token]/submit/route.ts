@@ -7,17 +7,7 @@ import {
 } from '@/lib/joinLink'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
-const RELATIONSHIP_TYPES = [
-  'OWNER',
-  'TENANT',
-  'FAMILY',
-  'COHABITANT',
-  'OTHER',
-] as const
-
 const MAX_ACTIVE_RESIDENTS_PER_UNIT = 5
-
-type RelationshipType = (typeof RELATIONSHIP_TYPES)[number]
 
 type SubmitBody = {
   email?: string
@@ -33,16 +23,13 @@ type Submission = {
   firstName: string
   lastName: string
   phone: string | null
-  relationshipType: RelationshipType
+  relationshipType: string
   unitId: string
 }
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase()
 
 const validEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
-
-const toRelationshipType = (value: string | undefined) =>
-  RELATIONSHIP_TYPES.find(type => type === value)
 
 // undefined: el body no es JSON válido
 async function readBody(request: Request) {
@@ -58,7 +45,7 @@ const normalizeFields = (body: SubmitBody) => ({
   firstName: body.firstName?.trim(),
   lastName: body.lastName?.trim(),
   phone: body.phone?.trim() || null,
-  relationshipType: toRelationshipType(body.relationshipType),
+  relationshipType: body.relationshipType?.trim(),
   unitId: body.unitId,
 })
 
@@ -77,6 +64,22 @@ function parseSubmission(body: SubmitBody) {
   }
 
   return { email, firstName, lastName, phone, relationshipType, unitId }
+}
+
+// Solo se aceptan los tipos activos del catálogo, los mismos que ofrece el GET.
+async function relationshipTypeNotFound(relationshipType: string) {
+  const { data: type, error } = await supabaseAdmin
+    .from('resident_relationship_types')
+    .select('code')
+    .eq('code', relationshipType)
+    .eq('active', true)
+    .maybeSingle()
+
+  if (error) {
+    return errorResponse('INTERNAL_ERROR', 500)
+  }
+
+  return type ? null : errorResponse('VALIDATION_ERROR', 400)
 }
 
 async function unitNotFound(joinLink: JoinLink, unitId: string) {
@@ -132,6 +135,7 @@ async function alreadyPending(joinLink: JoinLink, submission: Submission) {
 
 // Corre los chequeos en orden y devuelve la primera respuesta de rechazo.
 const findRejection = async (joinLink: JoinLink, submission: Submission) =>
+  (await relationshipTypeNotFound(submission.relationshipType)) ??
   (await unitNotFound(joinLink, submission.unitId)) ??
   (await unitAtCapacity(joinLink, submission.unitId)) ??
   (await alreadyPending(joinLink, submission))

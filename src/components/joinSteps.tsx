@@ -9,7 +9,7 @@ import {
   STEP_TITLE_ID,
   Title,
 } from '@/components/joinUi'
-import { type JoinFormState, relationships } from '@/components/useJoinForm'
+import type { JoinFormState } from '@/components/useJoinForm'
 
 type StepProps = {
   form: JoinFormState
@@ -166,7 +166,7 @@ const RelationshipStep = ({ form }: StepProps) => (
     </Title>
 
     <div className="mt-8 space-y-2">
-      {relationships.map(item => (
+      {form.data.relationships.map(item => (
         <button
           className={`w-full rounded-[18px] px-5 py-4 text-left text-base transition ${
             form.relationship === item.value
@@ -205,7 +205,10 @@ const ReviewStep = ({ form }: StepProps) => (
       <Review label="Unidad">{form.selectedUnit?.label}</Review>
 
       <Review label="Relación">
-        {relationships.find(item => item.value === form.relationship)?.label}
+        {
+          form.data.relationships.find(item => item.value === form.relationship)
+            ?.label
+        }
       </Review>
     </div>
 

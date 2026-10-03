@@ -46,8 +46,24 @@ export async function GET(
     return errorResponse('INTERNAL_ERROR', 500)
   }
 
+  const { data: relationshipTypes, error: relationshipTypesError } =
+    await supabaseAdmin
+      .from('resident_relationship_types')
+      .select('code, label')
+      .eq('active', true)
+      .order('sort_order', { ascending: true })
+
+  if (relationshipTypesError) {
+    return errorResponse('INTERNAL_ERROR', 500)
+  }
+
   return NextResponse.json({
     consorcio: toConsorcio(joinLink.edificios),
+    relationships:
+      relationshipTypes?.map(type => ({
+        label: type.label,
+        value: type.code,
+      })) ?? [],
     units: units?.map(unit => ({ id: unit.id, label: unit.numero })) ?? [],
   })
 }
