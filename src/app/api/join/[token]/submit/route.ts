@@ -1,7 +1,11 @@
-import { createHash } from 'crypto'
 import { NextResponse } from 'next/server'
 
-import { supabaseAdmin } from '@/lib/supabase-admin'
+import {
+  errorResponse,
+  findActiveJoinLink,
+  type JoinLink,
+} from '@/lib/joinLink'
+import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 const RELATIONSHIP_TYPES = [
   'OWNER',
@@ -11,12 +15,149 @@ const RELATIONSHIP_TYPES = [
   'OTHER',
 ] as const
 
-const hashToken = (token: string) =>
-  createHash('sha256').update(token).digest('hex')
+const MAX_ACTIVE_RESIDENTS_PER_UNIT = 5
+
+type RelationshipType = (typeof RELATIONSHIP_TYPES)[number]
+
+type SubmitBody = {
+  email?: string
+  firstName?: string
+  lastName?: string
+  phone?: string
+  relationshipType?: string
+  unitId?: string
+}
+
+type Submission = {
+  email: string
+  firstName: string
+  lastName: string
+  phone: string | null
+  relationshipType: RelationshipType
+  unitId: string
+}
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase()
 
 const validEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+
+const toRelationshipType = (value: string | undefined) =>
+  RELATIONSHIP_TYPES.find(type => type === value)
+
+// undefined: el body no es JSON válido
+async function readBody(request: Request) {
+  try {
+    return (await request.json()) as SubmitBody
+  } catch {
+    return undefined
+  }
+}
+
+const normalizeFields = (body: SubmitBody) => ({
+  email: normalizeEmail(body.email ?? ''),
+  firstName: body.firstName?.trim(),
+  lastName: body.lastName?.trim(),
+  phone: body.phone?.trim() || null,
+  relationshipType: toRelationshipType(body.relationshipType),
+  unitId: body.unitId,
+})
+
+function parseSubmission(body: SubmitBody) {
+  const { email, firstName, lastName, phone, relationshipType, unitId } =
+    normalizeFields(body)
+
+  if (
+    !firstName ||
+    !lastName ||
+    !validEmail(email) ||
+    !unitId ||
+    !relationshipType
+  ) {
+    return null
+  }
+
+  return { email, firstName, lastName, phone, relationshipType, unitId }
+}
+
+async function unitNotFound(joinLink: JoinLink, unitId: string) {
+  const { data: unit, error } = await supabaseAdmin
+    .from('unidades')
+    .select('id')
+    .eq('id', unitId)
+    .eq('organization_id', joinLink.organization_id)
+    .eq('edificio_id', joinLink.edificio_id)
+    .maybeSingle()
+
+  if (error) {
+    return errorResponse('INTERNAL_ERROR', 500)
+  }
+
+  return unit ? null : errorResponse('UNIT_NOT_FOUND', 404)
+}
+
+async function unitAtCapacity(joinLink: JoinLink, unitId: string) {
+  const { count: activeResidents, error } = await supabaseAdmin
+    .from('resident_unit_links')
+    .select('id', { count: 'exact', head: true })
+    .eq('unidad_id', unitId)
+    .eq('organization_id', joinLink.organization_id)
+    .eq('active', true)
+
+  if (error) {
+    return errorResponse('INTERNAL_ERROR', 500)
+  }
+
+  return (activeResidents ?? 0) >= MAX_ACTIVE_RESIDENTS_PER_UNIT
+    ? errorResponse('UNIT_LIMIT_REACHED', 409)
+    : null
+}
+
+async function alreadyPending(joinLink: JoinLink, submission: Submission) {
+  const { data: existingRequest, error } = await supabaseAdmin
+    .from('resident_onboarding_requests')
+    .select('id')
+    .eq('organization_id', joinLink.organization_id)
+    .eq('edificio_id', joinLink.edificio_id)
+    .eq('unidad_id', submission.unitId)
+    .eq('email', submission.email)
+    .eq('status', 'PENDING_VERIFICATION')
+    .maybeSingle()
+
+  if (error) {
+    return errorResponse('INTERNAL_ERROR', 500)
+  }
+
+  return existingRequest ? errorResponse('ALREADY_PENDING', 409) : null
+}
+
+// Corre los chequeos en orden y devuelve la primera respuesta de rechazo.
+const findRejection = async (joinLink: JoinLink, submission: Submission) =>
+  (await unitNotFound(joinLink, submission.unitId)) ??
+  (await unitAtCapacity(joinLink, submission.unitId)) ??
+  (await alreadyPending(joinLink, submission))
+
+async function insertRequest(joinLink: JoinLink, submission: Submission) {
+  const { error } = await supabaseAdmin
+    .from('resident_onboarding_requests')
+    .insert({
+      edificio_id: joinLink.edificio_id,
+      email: submission.email,
+      first_name: submission.firstName,
+      join_link_id: joinLink.id,
+      last_name: submission.lastName,
+      organization_id: joinLink.organization_id,
+      phone: submission.phone,
+      relationship_type: submission.relationshipType,
+      status: 'PENDING_VERIFICATION',
+      unidad_id: submission.unitId,
+    })
+
+  if (error) {
+    return errorResponse('INTERNAL_ERROR', 500)
+  }
+
+  return NextResponse.json({ status: 'PENDING_VERIFICATION' }, { status: 201 })
+}
 
 export async function POST(
   request: Request,
@@ -25,145 +166,23 @@ export async function POST(
   const { token } = await context.params
 
   if (!token) {
-    return NextResponse.json({ code: 'INVALID_TOKEN' }, { status: 400 })
+    return errorResponse('INVALID_TOKEN', 400)
   }
 
-  let body: {
-    firstName?: string
-    lastName?: string
-    email?: string
-    phone?: string
-    unitId?: string
-    relationshipType?: string
+  const body = await readBody(request)
+  const submission = body === undefined ? null : parseSubmission(body)
+
+  if (!submission) {
+    return errorResponse('VALIDATION_ERROR', 400)
   }
 
-  try {
-    body = await request.json()
-  } catch {
-    return NextResponse.json({ code: 'VALIDATION_ERROR' }, { status: 400 })
+  const result = await findActiveJoinLink(token)
+
+  if ('response' in result) {
+    return result.response
   }
 
-  const firstName = body.firstName?.trim()
-  const lastName = body.lastName?.trim()
-  const email = normalizeEmail(body.email ?? '')
-  const phone = body.phone?.trim() || null
-  const unitId = body.unitId
-  const relationshipType = body.relationshipType
+  const rejection = await findRejection(result.joinLink, submission)
 
-  if (
-    !firstName ||
-    !lastName ||
-    !validEmail(email) ||
-    !unitId ||
-    !relationshipType ||
-    !RELATIONSHIP_TYPES.includes(
-      relationshipType as (typeof RELATIONSHIP_TYPES)[number],
-    )
-  ) {
-    return NextResponse.json({ code: 'VALIDATION_ERROR' }, { status: 400 })
-  }
-
-  const tokenHash = hashToken(token)
-
-  const { data: joinLink, error: joinError } = await supabaseAdmin
-    .from('resident_join_links')
-    .select('id, organization_id, edificio_id, status, expires_at')
-    .eq('token_hash', tokenHash)
-    .maybeSingle()
-
-  if (joinError) {
-    console.error('join lookup failed', joinError)
-
-    return NextResponse.json({ code: 'INTERNAL_ERROR' }, { status: 500 })
-  }
-
-  if (!joinLink) {
-    return NextResponse.json({ code: 'INVALID_TOKEN' }, { status: 404 })
-  }
-
-  if (
-    joinLink.status !== 'active' ||
-    (joinLink.expires_at &&
-      new Date(joinLink.expires_at).getTime() <= Date.now())
-  ) {
-    return NextResponse.json({ code: 'TOKEN_INACTIVE' }, { status: 410 })
-  }
-
-  const { data: unit, error: unitError } = await supabaseAdmin
-    .from('unidades')
-    .select('id')
-    .eq('id', unitId)
-    .eq('organization_id', joinLink.organization_id)
-    .eq('edificio_id', joinLink.edificio_id)
-    .maybeSingle()
-
-  if (unitError) {
-    console.error('unit lookup failed', unitError)
-
-    return NextResponse.json({ code: 'INTERNAL_ERROR' }, { status: 500 })
-  }
-
-  if (!unit) {
-    return NextResponse.json({ code: 'UNIT_NOT_FOUND' }, { status: 404 })
-  }
-
-  const { count: activeResidents, error: countError } = await supabaseAdmin
-    .from('resident_unit_links')
-    .select('id', { count: 'exact', head: true })
-    .eq('unidad_id', unitId)
-    .eq('organization_id', joinLink.organization_id)
-    .eq('active', true)
-
-  if (countError) {
-    console.error('resident count failed', countError)
-
-    return NextResponse.json({ code: 'INTERNAL_ERROR' }, { status: 500 })
-  }
-
-  if ((activeResidents ?? 0) >= 5) {
-    return NextResponse.json({ code: 'UNIT_LIMIT_REACHED' }, { status: 409 })
-  }
-
-  const { data: existingRequest, error: existingError } = await supabaseAdmin
-    .from('resident_onboarding_requests')
-    .select('id')
-    .eq('organization_id', joinLink.organization_id)
-    .eq('edificio_id', joinLink.edificio_id)
-    .eq('unidad_id', unitId)
-    .eq('email', email)
-    .eq('status', 'PENDING_VERIFICATION')
-    .maybeSingle()
-
-  if (existingError) {
-    console.error('pending request lookup failed', existingError)
-
-    return NextResponse.json({ code: 'INTERNAL_ERROR' }, { status: 500 })
-  }
-
-  if (existingRequest) {
-    return NextResponse.json({ code: 'ALREADY_PENDING' }, { status: 409 })
-  }
-
-  const { error: insertError } = await supabaseAdmin
-    .from('resident_onboarding_requests')
-    .insert({
-      join_link_id: joinLink.id,
-      organization_id: joinLink.organization_id,
-      edificio_id: joinLink.edificio_id,
-      unidad_id: unitId,
-      first_name: firstName,
-      last_name: lastName,
-      email,
-      phone,
-      relationship_type: relationshipType,
-      status: 'PENDING_VERIFICATION',
-    })
-
-  if (insertError) {
-    console.error('request insert failed', insertError)
-
-    return NextResponse.json({ code: 'INTERNAL_ERROR' }, { status: 500 })
-  }
-
-  return NextResponse.json({ status: 'PENDING_VERIFICATION' }, { status: 201 })
+  return rejection ?? insertRequest(result.joinLink, submission)
 }
