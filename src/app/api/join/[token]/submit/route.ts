@@ -151,7 +151,7 @@ async function insertRequest(joinLink: JoinLink, submission: Submission) {
       last_name: submission.lastName,
       organization_id: joinLink.organization_id,
       phone: submission.phone,
-      relationship_type: submission.relationshipType,
+      relationship_type_code: submission.relationshipType,
       status: 'PENDING_VERIFICATION',
       unidad_id: submission.unitId,
     })
